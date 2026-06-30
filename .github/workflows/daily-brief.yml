@@ -32,5 +32,7 @@ jobs:
           MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
           IMAP_SERVER: ${{ secrets.IMAP_SERVER }}   # opcional, se você criou esse secret
           IMAP_PORT: ${{ secrets.IMAP_PORT }}       # opcional, se você criou esse secret
+          BOT_INGEST_URL: ${{ secrets.BOT_INGEST_URL }}   # endpoint do nosso bot de conteúdo
+          NEWS_SECRET: ${{ secrets.NEWS_SECRET }}          # segredo do endpoint de ingest
         run: |
           python scripts/digest.py

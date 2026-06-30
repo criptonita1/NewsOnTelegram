@@ -20,6 +20,9 @@ MAIL_EMAIL = os.getenv("MAIL_EMAIL")
 MAIL_APP_PASSWORD = os.getenv("MAIL_APP_PASSWORD")
 IMAP_SERVER = os.getenv("IMAP_SERVER") or "imap.gmail.com"
 IMAP_PORT = int(os.getenv("IMAP_PORT") or "993")
+# manda o brief pro nosso bot de conteúdo (vira a pauta da manhã)
+BOT_INGEST_URL = os.getenv("BOT_INGEST_URL")
+NEWS_SECRET = os.getenv("NEWS_SECRET")
 
 if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
     raise SystemExit(
@@ -695,6 +698,24 @@ def post_telegram(text):
         raise
 
 
+def post_to_bot(text):
+    """Manda o digest pro endpoint do nosso bot de conteúdo (ele usa na pauta da manhã)."""
+    if not BOT_INGEST_URL or not NEWS_SECRET:
+        print("[BOT] BOT_INGEST_URL/NEWS_SECRET não setados; pulando ingest no bot.")
+        return
+    try:
+        r = requests.post(
+            BOT_INGEST_URL,
+            json={"text": text},
+            headers={"Authorization": f"Bearer {NEWS_SECRET}"},
+            timeout=20,
+        )
+        r.raise_for_status()
+        print("[BOT] ingest ok:", str(r.text)[:120])
+    except Exception as e:
+        print("[BOT] ingest error:", e)
+
+
 def main():
     print("[START] Digest run:", datetime.now().isoformat())
     now = datetime.now(timezone.utc)
@@ -743,6 +764,11 @@ def main():
 
     msg_principal, msg_leia_mais = format_message(top5, want_more)
 
+    # 1) manda o brief pro nosso bot de conteúdo (ele monta a pauta da manhã em cima disso)
+    brief_for_bot = msg_principal + (("\n\n" + msg_leia_mais) if msg_leia_mais else "")
+    post_to_bot(brief_for_bot)
+
+    # 2) (opcional) continua mandando o brief cru no seu Telegram também
     try:
         resp = post_telegram(msg_principal)
         print("[POST] Telegram principal OK:", resp.get("result", {}).get("message_id"))

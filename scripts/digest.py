@@ -20,13 +20,23 @@ MAIL_EMAIL = os.getenv("MAIL_EMAIL")
 MAIL_APP_PASSWORD = os.getenv("MAIL_APP_PASSWORD")
 IMAP_SERVER = os.getenv("IMAP_SERVER") or "imap.gmail.com"
 IMAP_PORT = int(os.getenv("IMAP_PORT") or "993")
-# manda o brief pro nosso bot de conteúdo (vira a pauta da manhã)
+# manda o brief pro nosso bot de conteúdo (vira a pauta da manhã) — SAÍDA PRIMÁRIA agora.
 BOT_INGEST_URL = os.getenv("BOT_INGEST_URL")
 NEWS_SECRET = os.getenv("NEWS_SECRET")
+# O digest deixou de ser mensagem diária no Telegram do João: agora ele SÓ alimenta o bot de
+# conteúdo, que propõe posts em cima (a vertical "news-take"). O DM no Telegram fica DESLIGADO por
+# padrão; pra religar o brief cru no Telegram, setar SEND_TELEGRAM_DIGEST=1 nos secrets.
+SEND_TELEGRAM_DIGEST = os.getenv("SEND_TELEGRAM_DIGEST", "0") == "1"
 
-if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+# a saída obrigatória virou o bot (não o Telegram): sem as credenciais do ingest, falha alto.
+if not BOT_INGEST_URL or not NEWS_SECRET:
     raise SystemExit(
-        "Missing TELEGRAM_TOKEN or TELEGRAM_CHAT_ID environment variables (set as GitHub secrets)."
+        "Missing BOT_INGEST_URL or NEWS_SECRET — o bot de conteúdo é a saída primária (set as GitHub secrets)."
+    )
+# Telegram só é exigido se o João RELIGAR o DM (SEND_TELEGRAM_DIGEST=1).
+if SEND_TELEGRAM_DIGEST and (not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID):
+    raise SystemExit(
+        "SEND_TELEGRAM_DIGEST=1 mas falta TELEGRAM_TOKEN/TELEGRAM_CHAT_ID."
     )
 
 AI_KEYWORDS = [
@@ -768,16 +778,20 @@ def main():
     brief_for_bot = msg_principal + (("\n\n" + msg_leia_mais) if msg_leia_mais else "")
     post_to_bot(brief_for_bot)
 
-    # 2) (opcional) continua mandando o brief cru no seu Telegram também
-    try:
-        resp = post_telegram(msg_principal)
-        print("[POST] Telegram principal OK:", resp.get("result", {}).get("message_id"))
-        if msg_leia_mais:
-            resp2 = post_telegram(msg_leia_mais)
-            print("[POST] Telegram Leia mais OK:", resp2.get("result", {}).get("message_id"))
-    except Exception as e:
-        print("[POST] Telegram post failed:", e)
-        traceback.print_exc()
+    # 2) DM no Telegram do João: DESLIGADO por padrão — ele NÃO quer mais o digest diário como
+    #    mensagem, só quer o motor de conteúdo (o bot propõe os posts). Religa com SEND_TELEGRAM_DIGEST=1.
+    if SEND_TELEGRAM_DIGEST:
+        try:
+            resp = post_telegram(msg_principal)
+            print("[POST] Telegram principal OK:", resp.get("result", {}).get("message_id"))
+            if msg_leia_mais:
+                resp2 = post_telegram(msg_leia_mais)
+                print("[POST] Telegram Leia mais OK:", resp2.get("result", {}).get("message_id"))
+        except Exception as e:
+            print("[POST] Telegram post failed:", e)
+            traceback.print_exc()
+    else:
+        print("[POST] Telegram DM desligado (SEND_TELEGRAM_DIGEST!=1) — só alimentei o bot de conteúdo.")
 
     print("[END] Digest run completed.")
 
